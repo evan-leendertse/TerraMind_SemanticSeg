@@ -77,3 +77,66 @@ def standardize(data: torch.Tensor, dim: int = 1, eps: float = 1e-8):
     stds = data.std(dim=dim, keepdim=True)
     normalized = (data - means) / (stds + eps)
     return normalized
+
+
+def weights(dataloader, num_classes=3, ignore_index=0, device="cpu"):
+    num_pixels = torch.zeros(num_classes, dtype=torch.float, device=device)
+
+    for _, y in dataloader:   # y has shape [B, H, W]
+        y = y.to(device)
+        for c in range(num_classes):
+            if c != ignore_index:
+                num_pixels[c] += (y == c).sum()
+
+    return num_pixels
+
+
+
+# def calc_batch_metrics(logits, y, ignore_index=None):
+#     predictions = torch.argmax(logits, dim=1)
+#     eps = .1e-6
+
+#     if ignore_index is not None:
+#         mask = (y != ignore_index)
+#     else:
+#         mask = torch.ones_like(y, dtype=torch.bool)
+
+#     TP = ((predictions == y) & mask & (y != 0)).sum().item() 
+#     FP = ((predictions != y) & mask & (predictions != 0)).sum().item()
+#     FN = ((predictions != y) & mask & (y != 0)).sum().item()
+#     TN = ((predictions == y) & mask & (y == 0)).sum().item()
+
+#     return TP, FP, FN, TN
+
+def calc_batch_metrics(logits, y, ignore_index=None, positive_class=2, negative_class=1):
+    predictions = torch.argmax(logits, dim=1)
+
+    if ignore_index is not None:
+        mask = (y != ignore_index)
+    else:
+        mask = torch.ones_like(y, dtype=torch.bool)
+
+    TP = ((predictions == positive_class) & (y == positive_class) & mask).sum().item()
+    TN = ((predictions == negative_class) & (y == negative_class) & mask).sum().item()
+    FP = ((predictions == positive_class) & (y == negative_class) & mask).sum().item()
+    FN = ((predictions == negative_class) & (y == positive_class) & mask).sum().item()
+
+    return TP, FP, FN, TN
+
+
+def calc_epoch_metrics(TP, FP, FN, TN):
+    eps = .1e-6
+
+    accuracy = TP /(TP + FP + TN + FN + eps)
+    precision = TP /(TP + FP + eps)
+    recall = TP /(TP + FN + eps)
+    f1 = (2*precision*recall) /(precision + recall  + eps)
+    iou = TP/ (TP + FP + FN + eps)
+    
+    results = {"accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "F1": f1,
+        "IoU": iou}
+
+    return results
