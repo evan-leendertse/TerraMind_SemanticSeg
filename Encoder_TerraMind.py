@@ -1,20 +1,24 @@
 import torch.nn as nn
 from terratorch.registry import BACKBONE_REGISTRY
 from terratorch.models import necks
-import albumentations
+# import albumentations
 
 class TerraMindEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self,
+                 version: str = "terramind_v1_base",
+                 pretrained: bool = True,
+                 modalities: list[str] = ['S2L2A']
+                 ):
         super().__init__()
         self.model = BACKBONE_REGISTRY.build(
-            'terramind_v1_base', 
-            pretrained = True,
-            modalities = ['S2L2A'])
+            version, 
+            pretrained = pretrained,
+            modalities = modalities)
 
 
     def forward(self, x):
         embeddings = self.model(x)        
         
-        return embeddings 
+        return embeddings
 
 
