@@ -1,52 +1,20 @@
 import numpy as np
 import torch
-from torchvision import transforms
 import random
-from datetime import datetime
 import os
-from  torch.utils.tensorboard.writer import SummaryWriter
+import matplotlib.cm as cm
 import yaml
 from omegaconf import OmegaConf
 import glob
 
-class RandomCrop(object):
-    """Crop randomly the image in a sample.
-
-    Args:
-        output_size (tuple or int): Desired output size. If int, square crop
-            is made.
-    """
-
-    def __init__(self, output_size):
-        assert isinstance(output_size, (int, tuple))
-        if isinstance(output_size, int):
-            self.output_size = (output_size, output_size)
-        else:
-            assert len(output_size) == 2
-            self.output_size = output_size
-
-    def __call__(self, sample):
-        x_before, x_after, y = sample['x_before'], sample['x_after'], sample['y']
-
-
-        h, w = x_before.shape[1:] #grabbing h and w assuming [C, H, W]
-        new_h, new_w = self.output_size
-
-        assert h >= new_h , "Output height is larger than original height"
-        assert w >= new_w, "Output width is larger than original width"
-
-        top = np.random.randint(0, h - new_h + 1)
-        left = np.random.randint(0, w - new_w + 1)
-
-        x_before = x_before[:, top:top+new_h, left:left+new_w]
-        x_after = x_after[:, top:top+new_h, left:left+new_w]
-        y = y[top:top+new_h, left:left+new_w]
-
-        return {'x_before': x_before, 'x_after': x_after, 'y': y}
-    
 
 
 class RandomFlipPair:
+    """
+    Will randomly flip patches as they are passed over as augmentations. 
+    In practice this will create multiple slightly different images from same patch
+    """
+
     def __call__(self, sample):
         before, after, y = sample['before'], sample['after'], sample['y']
 
@@ -66,27 +34,13 @@ class RandomFlipPair:
 
 
 
-# class RandomFlipPair(object):
-#     """Random horizontal and vertical flips for paired images and mask."""
-#     def __call__(self, sample):
-#         x_before, x_after, y = sample['x_before'], sample['x_after'], sample['y']
-
-#         if random.random() > 0.5:
-#             x_before = torch.flip(x_before, dims=[2])
-#             x_after = torch.flip(x_after, dims=[2])
-#             y = torch.flip(y, dims=[1])
-
-#         if random.random() > 0.5:
-#             x_before = torch.flip(x_before, dims=[1])
-#             x_after = torch.flip(x_after, dims=[1])
-#             y = torch.flip(y, dims=[0])
-
-#         return {'x_before': x_before, 'x_after': x_after, 'y': y}
-
-
-
 
 class RandomRotationPair:
+    """
+    Will randomly rotate patches as they are passed over as augmentations. 
+    In practice this will create multiple slightly different images from same patch.
+    Rotation and flipping always ran together.
+    """
     def __call__(self, sample):
         before, after, y = sample['before'], sample['after'], sample['y']
         k = random.randint(0, 3)
@@ -100,21 +54,11 @@ class RandomRotationPair:
 
 
 
-# class RandomRotationPair(object):
-#     """Random rotation by 90, 180, or 270 degrees for paired images and mask."""
-#     def __call__(self, sample):
-#         x_before, x_after, y = sample['x_before'], sample['x_after'], sample['y']
-#         k = random.randint(1, 3)  # 1 -> 90°, 2 -> 180°, 3 -> 270°
-
-#         x_before = torch.rot90(x_before, k, dims=[1,2])
-#         x_after = torch.rot90(x_after, k, dims=[1,2])
-#         y = torch.rot90(y, k, dims=[0,1])
-
-#         return {'x_before': x_before, 'x_after': x_after, 'y': y}
-
 
 def standardize(data: torch.Tensor, dim: int = 1, eps: float = 1e-8):
-    
+    """
+    Standardize the input x data so that backpropogation is stable
+    """
     means = data.mean(dim=dim, keepdim=True)
     stds = data.std(dim=dim, keepdim=True)
     normalized = (data - means) / (stds + eps)
@@ -122,6 +66,9 @@ def standardize(data: torch.Tensor, dim: int = 1, eps: float = 1e-8):
 
 
 def weights(dataloader, num_classes=3, ignore_index=0, device="cpu"):
+    """
+    Weight classes in the loss function by their frequency
+    """
     num_pixels = torch.zeros(num_classes, dtype=torch.float, device=device)
 
     for _, y in dataloader:   # y has shape [B, H, W]
@@ -135,6 +82,9 @@ def weights(dataloader, num_classes=3, ignore_index=0, device="cpu"):
 
 
 def calc_batch_metrics(logits, y, ignore_index=None, positive_class=2, negative_class=1):
+    """
+    Calculate metrics by batch in train/validation loop. Later to be fed into calc_epoch_metrics
+    """
     predictions = torch.argmax(logits, dim=1)
 
     if ignore_index is not None:
@@ -151,6 +101,10 @@ def calc_batch_metrics(logits, y, ignore_index=None, positive_class=2, negative_
 
 
 def calc_epoch_metrics(TP, FP, FN, TN):
+    """
+    Calculate metrics by epoch in train/validation loop
+    """
+    # To avoid div/0 issue
     eps = .1e-6
 
     accuracy = (TP+TN) /(TP + FP + TN + FN + eps)
@@ -170,7 +124,7 @@ def calc_epoch_metrics(TP, FP, FN, TN):
 
 def move_to_device(batch, device):
     """
-    Recursively moves a nested dict or list of tensors to the given device.
+    Helper function to pass x dict values to device
     """
     if torch.is_tensor(batch):
         return batch.to(device)
@@ -184,44 +138,34 @@ def move_to_device(batch, device):
 
 
 # Set seeds
-def set_seeds(seed: int=42):
-    """Sets random sets for torch operations.
-
-    Args:
-        seed (int, optional): Random seed to set. Defaults to 42.
+def set_seeds(seed: int=22):
     """
-    # Set the seed for general torch operations
+    Sets torch seeds for reproducibility
+    """
     torch.manual_seed(seed)
-    # Set the seed for CUDA torch operations (ones that happen on the GPU)
     torch.cuda.manual_seed(seed)
 
     
 
-
-def create_writer(experiment_name, experiment_number):
-    log_dir = os.path.join("runs", experiment_name, str(experiment_number))
-    writer = SummaryWriter(log_dir=log_dir)
-    return writer, log_dir
-
-
-
 def save_checkpoint(encoder, decoder, optimizer, epoch, val_loss, cfg, save_dir="checkpoints"):
     """
-    Save model checkpoint and config, deleting previous best files.
+    Save model checkpoint and config while deleting existing configs/models.
+    In practice, will only will be activated when current loss < existing best loss
+    Realistically should not be rewriting configs each time as they don't change while in the same experiment
+    -->edit to check if existing config, if not write config, if so, do nothing
     """
     os.makedirs(save_dir, exist_ok=True)
 
-    # ---------------- Delete previous best checkpoint ---------------- #
+    # #Delete curent best checkpoint and config
     old_checkpoints = glob.glob(os.path.join(save_dir, "best_model_*.pt"))
     for f in old_checkpoints:
         os.remove(f)
 
-    # ---------------- Delete previous best config ---------------- #
     old_configs = glob.glob(os.path.join(save_dir, "best_config_*.yaml"))
     for f in old_configs:
         os.remove(f)
 
-    # ---------------- Save new best checkpoint ---------------- #
+    # Save new best checkpoint & config
     checkpoint_path = os.path.join(save_dir, f"best_model_epoch{epoch}_valloss{val_loss:.4f}.pt")
     torch.save({
         'epoch': epoch,
@@ -231,47 +175,66 @@ def save_checkpoint(encoder, decoder, optimizer, epoch, val_loss, cfg, save_dir=
         'val_loss': val_loss,
     }, checkpoint_path)
 
-    # ---------------- Save config used for this checkpoint ---------------- #
     cfg_path = os.path.join(save_dir, f"best_config_epoch{epoch}_valloss{val_loss:.4f}.yaml")
     OmegaConf.save(cfg, cfg_path)
-
     print(f"Saved new best checkpoint: {checkpoint_path}")
-    print(f"Saved corresponding config: {cfg_path}")
 
 
-
-# def save_checkpoint(encoder, decoder, optimizer, epoch, val_loss, cfg, save_dir="checkpoints"):
-#     os.makedirs(save_dir, exist_ok=True)
+def calc_test_metrics(image_tiles_pred, image_tiles_true, ignore_index=0, positive_class=2, negative_class=1):
+    """
+    calculate metrics of interest for our test runs only
+    """
     
-#     # Save the model checkpoint
-#     save_path = os.path.join(save_dir, f"model_epoch{epoch}_valloss{val_loss:.4f}.pt")
-#     torch.save({
-#         'epoch': epoch,
-#         'encoder_state_dict': encoder.state_dict(),
-#         'decoder_state_dict': decoder.state_dict(),
-#         'optimizer_state_dict': optimizer.state_dict(),
-#         'val_loss': val_loss,
-#     }, save_path)
-    
-#     # Save the full Hydra config as YAML
-#     cfg_path = os.path.join(save_dir, f"config_epoch{epoch}.yaml")
-#     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
-#     with open(cfg_path, 'w') as f:
-#         yaml.dump(cfg_dict, f)
+    # To avoid div/0 issue
+    eps = 1e-6
 
-# def save_checkpoint(encoder, decoder, optimizer, epoch, val_loss, config, save_dir="checkpoints"):
-#     os.makedirs(save_dir, exist_ok=True)
-#     save_path = os.path.join(save_dir, f"model_epoch{epoch}_valloss{val_loss:.4f}.pt")
-    
-#     torch.save({
-#         'epoch': epoch,
-#         'encoder_state_dict': encoder.state_dict(),
-#         'decoder_state_dict': decoder.state_dict(),
-#         'optimizer_state_dict': optimizer.state_dict(),
-#         'val_loss': val_loss,  # this is your hyperparameter dictionary
-#     }, save_path)
+    all_results = {}
+
+    # run over each image tile (true & pred)
+    for idx in image_tiles_pred.keys():
+        pred = image_tiles_pred[idx].long()
+        true = image_tiles_true[idx].long()
+
+        # Apply ignore mask (background)
+        if ignore_index is not None:
+            mask = (true != ignore_index)
+            pred = pred[mask]
+            true = true[mask]
+
+        TP = ((pred == positive_class) & (true == positive_class)).sum().item()
+        TN = ((pred == negative_class) & (true == negative_class)).sum().item()
+        FP = ((pred == positive_class) & (true == negative_class)).sum().item()
+        FN = ((pred == negative_class) & (true == positive_class)).sum().item()
+
+        accuracy = (TP + TN) / (TP + FP + TN + FN + eps)
+        precision = TP / (TP + FP + eps)
+        recall = TP / (TP + FN + eps)
+        f1 = (2 * precision * recall) / (precision + recall + eps)
+        iou = TP / (TP + FP + FN + eps)
+
+        # Return all desired results
+        all_results[idx] = {
+            "Accuracy": accuracy,
+            "Precision": precision,
+            "Recall": recall,
+            "F1": f1,
+            "IoU": iou
+        }
+
+    return all_results
 
 
+def tensor_to_color_image(tensor, num_classes=3):
+    """
+    This will help our images show up in color on tensorboard
+    """
+    if isinstance(tensor, list):  # handle list case
+        tensor = tensor[0]
+    if tensor.dim() == 3 and tensor.shape[0] == 1:  # (1,H,W)
+        tensor = tensor.squeeze(0)
+    tensor_np = tensor.detach().cpu().numpy().astype(np.uint8)
 
-
-    # print(f"✅ Saved checkpoint: {save_path}")
+    cmap = cm.get_cmap('tab10', num_classes)
+    color_np = (cmap(tensor_np)[:, :, :3] * 255).astype(np.uint8)
+    color_tensor = torch.from_numpy(color_np).permute(2, 0, 1)  # (3,H,W)
+    return color_tensor

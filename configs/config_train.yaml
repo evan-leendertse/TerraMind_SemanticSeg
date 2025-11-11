@@ -1,0 +1,24 @@
+defaults:
+  - train_loader: large
+  - validation_loader: large
+  - model: base
+  - _self_
+
+writer:
+  experiment_name: "Initial2"
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+    dir: multirun/${writer.experiment_name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  output_subdir: null
+  sweeper:
+    params:
+      model.num_epochs: 100
+      train_loader.num_augmentations: 0, 5, 20
+      train_loader.batch_size: 4, 8, 20
+      model.apply_weight_loss: True, False
+      model.learning_rate: 0.0005, 0.00005, 0.0000001
+
+
