@@ -81,7 +81,6 @@ def main(cfg: DictConfig):
             criterion = nn.CrossEntropyLoss(weight = inverse, ignore_index= cfg.model.ignore_index)
     else:
         criterion = nn.CrossEntropyLoss(ignore_index=cfg.model.ignore_index)
-    print(inverse, pixels)
     
     encoder = TerraMindEncoder(version = cfg.model.TM_version, 
                                pretrained =  cfg.model.pretrained, 
