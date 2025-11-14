@@ -6,7 +6,7 @@ logging.getLogger("albumentations").setLevel(logging.ERROR)
 from DataLoader import Train_Val_Loader
 from Decoder_UNet2D import UNet2D
 from Encoder_TerraMind import TerraMindEncoder
-from utils import RandomFlipPair, RandomRotationPair, weights, calc_batch_metrics, calc_epoch_metrics, move_to_device, set_seeds, save_checkpoint
+from utils import weights, calc_batch_metrics, calc_epoch_metrics, move_to_device, set_seeds, save_checkpoint
 
 
 #General Requirements
@@ -25,7 +25,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
  
  # Hydra sets configs outside of this file so we can edit params without touching this file
 # ------------------------------Set train function using config.yaml including writer to save model details + metrics + config file --------------------------------------- #
-@hydra.main(version_base = "1.2", config_path = "configs" , config_name = 'config_train')
+@hydra.main(version_base = "1.2", config_path = "configs/train_val" , config_name = 'config')
 def main(cfg: DictConfig):
     #setting writer so we store all metrics + checkpoints + configs in one place
     hc = HydraConfig.get()
@@ -74,11 +74,15 @@ def main(cfg: DictConfig):
 
     # Set up model configurations
     if cfg.model.apply_weight_loss:
-        weights_ = weights(train_dataloader, num_classes=cfg.model.num_classes, ignore_index=cfg.model.ignore_index, device = device)
-        criterion = nn.CrossEntropyLoss(weight = weights_, ignore_index= cfg.model.ignore_index)
+        inverse, pixels = weights(train_dataloader, num_classes=cfg.model.num_classes, ignore_index=cfg.model.ignore_index, device = device)
+        if cfg.model.weight_type == 'pixels':
+            criterion = nn.CrossEntropyLoss(weight = pixels, ignore_index= cfg.model.ignore_index)
+        if cfg.model.weight_type == 'inverse':
+            criterion = nn.CrossEntropyLoss(weight = inverse, ignore_index= cfg.model.ignore_index)
     else:
         criterion = nn.CrossEntropyLoss(ignore_index=cfg.model.ignore_index)
-
+    print(inverse, pixels)
+    
     encoder = TerraMindEncoder(version = cfg.model.TM_version, 
                                pretrained =  cfg.model.pretrained, 
                                modalities =  list(cfg.model.modalities))

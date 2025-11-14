@@ -336,12 +336,21 @@ class TestLoader(Dataset):
         i, (coord_y, coord_x) = self.index_map[img_index]
 
         data = {}
+        meta = None
         for name, (before_dir, after_dir) in self.modalities.items():
             before_file = sorted(Path(before_dir).glob("*.tif"))[i]
             after_file = sorted(Path(after_dir).glob("*.tif"))[i]
+            
+            # Save metadata from the first file type (doesnt matter as long as same index)
+            if meta is None:
+                with rio.open(before_file) as src:
+                    meta = src.meta.copy()
+
             data[name] = {
                 "before": self._load_tif(before_file),
                 "after": self._load_tif(after_file)}
+            
+            
 
         before_dict = {}
         after_dict = {}
@@ -355,8 +364,8 @@ class TestLoader(Dataset):
             patch_before = standardize(patch_before, dim=1)
             patch_after  = standardize(patch_after, dim=1)
 
-            before_dict[name] = patch_before.float()
-            after_dict[name]  = patch_after.float()
+            before_dict[name] = patch_before.unsqueeze(0).float()
+            after_dict[name]  = patch_after.unsqueeze(0).float()
 
         input_sample = {
         "before": before_dict,
@@ -369,4 +378,4 @@ class TestLoader(Dataset):
         y_patch = y_full[0, coord_y:coord_y+self.patch_size, coord_x:coord_x+self.patch_size]
         y_patch = y_patch.long()
 
-        return input_sample, y_patch, (i, coord_y, coord_x), (pad_left, pad_right, pad_top, pad_bottom) 
+        return input_sample, y_patch, (i, coord_y, coord_x), (pad_left, pad_right, pad_top, pad_bottom), meta

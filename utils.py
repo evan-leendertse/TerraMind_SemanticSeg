@@ -77,7 +77,15 @@ def weights(dataloader, num_classes=3, ignore_index=0, device="cpu"):
             if c != ignore_index:
                 num_pixels[c] += (y == c).sum()
 
-    return num_pixels
+    nonzero = num_pixels[num_pixels> 0]
+    inv_freq = 1.0 / nonzero
+    norm_inv_freq = inv_freq / inv_freq.mean()
+
+    inverse = torch.zeros_like(num_pixels)
+    inverse[num_pixels > 0] = norm_inv_freq
+
+    # return num_pixels #On original run Evan used this, I recommend experimenting between values
+    return inverse, num_pixels
 
 
 
