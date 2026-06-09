@@ -9,7 +9,7 @@
 #SBATCH --job-name=testrun
 #
 # Use current working directory
-#SBATCH --chdir=/fs1/home/ceoas/leendere/V2
+#SBATCH --chdir=###
 #
 # Set queue to use
 #SBATCH --partition=ceoas-arm
@@ -27,15 +27,15 @@
 #SBATCH --error=testrun/testrun.e
 #
 # Send an email at the beginning or end of the job (b and e), or if it's aborted or rescheduled (a)
-#SBATCH --mail-user=evanleendertse@gmail.com
+#SBATCH --mail-user=###
 #SBATCH --mail-type=ALL
 #
 # END SLURM OPTIONS DECLARATIONS
 #
-PATH=/home/ceoas/leendere/miniconda3_x86/envs/tm_arm/bin:/home/ceoas/leendere/miniconda3_x86/condabin:/local/cluster/sge/bin:/local/cluster/sge/bin/lx-amd64:/usr/local/cuda/bin:/home/ceoas/leendere/scripts:/home/ceoas/leendere/bin:/local/ceoas/bin:/local/ceoas/x86_64/bin:/local/cluster/slurm/bin:/local/cluster/MATLAB/R2023b/bin:/bin:/usr/bin:/usr/local/bin:/usr/X11R6/bin:/usr/X/bin:.
-LD_LIBRARY_PATH=/local/ceoas/x86_64/lib:/local/ceoas/x86_64/lib64
+PATH=###
+LD_LIBRARY_PATH=###
 export PATH
-export R_LIBS=/home/ceoas/leendere/R
+export R_LIBS=###
 #
 #
 #The following auto-generated commands will be run by the execution node.
